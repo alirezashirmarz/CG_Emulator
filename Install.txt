@@ -1,0 +1,24 @@
+### Joystick Loggra phically on linux ###
+# install
+$ sudo apt update
+$ sudo apt install joystick
+
+# Check the connected Joystick
+$ ls /dev/input/js*
+
+# See the commands 
+$ jstest /dev/input/js0
+
+## Python Log
+$ pip install pygame
+$ sudo pip3 install mss --break-system-packages
+
+
+## Install for Barcode
+$ pip3 install pyzbar Pillow --break-system-packages
+
+## WebRTC (Not requireed yet!)
+$ pip3 install aiortc opencv-python aiohttp --break-system-packages
+$ pip3 install aiohttp_cors --break-system-packages
+
+
