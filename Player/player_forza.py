@@ -1,29 +1,44 @@
-import cv2
+import cv2 , os, threading
 import socket
 import time
 import pandas as pd
 from datetime import datetime
+import struct
 
 # UDP Socket setup
-cg_server_ip = '200.18.102.25'  # IP address of the server (or the target machine)
+cg_server_ip = "200.18.102.25"  # IP address of the server (or the target machine)
 cg_server_port = 5501        # Port number to send commands to
 
-player_ip = '200.18.102.9'  # This Machine Port '172.17.0.1'
+player_ip = "200.18.102.9" #'200.18.102.9'  # This Machine Port '172.17.0.1'
 player_port = 5000  # Now both GStreamer and UDP socket will use port 5000
 
 auto_commands_file_addr = "/home/alireza/CG_Simulation/Phase4_Player_Command/autocommands_forza.txt"
+
 '''
-#sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-#sock.bind((client_ip, client_port))   # bind 5000
+# Function to ping the server and log the RTT
+def ping_and_log_rtt(server_ip, log_file):
+    while True:
+        response = os.popen(f"ping -c 1 -s 0 {server_ip}").read()
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        if "time=" in response:
+            rtt_start = response.find("time=") + 5
+            rtt_end = response.find(" ms", rtt_start)
+            rtt = response[rtt_start:rtt_end]
+            log_line = f"{timestamp} - RTT: {rtt} ms\n"
+        else:
+            log_line = f"{timestamp} - RTT: N/A\n"
+        with open(log_file, "a") as log:
+            log.write(log_line)
+        print(log_line, end="")
+        time.sleep(1)  # Wait for 1 second before next ping
+
+# Start the pinging in a separate thread
+def start_ping_thread(server_ip, log_file):
+    ping_thread = threading.Thread(target=ping_and_log_rtt, args=(server_ip, log_file))
+    ping_thread.daemon = True
+    ping_thread.start()
+
 '''
-
-# Create the UDP socket without binding it to port 5000
-#sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-# Enable port reuse to avoid conflicts
-#sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-#sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-
 
 # Custom function to load autocommands.txt while handling the complex 'command' field
 def load_autocommands(file_path):
@@ -48,12 +63,12 @@ print("Loaded autocommands:")
 print(autocommands_df)
 
 # Function to send command to server
-def send_command(frame_id, encrypted_cmd):
+def send_command(frame_id, encrypted_cmd,interface_name= "wlp0s20f3"):  #"enp0s31f6" wlp0s20f3
     # Create the UDP socket and allow address reuse
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    #sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-    
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, interface_name.encode())
     # Bind the socket to port 5000 for sending (reusing the port)
     sock.bind((player_ip, player_port))  # Bind to port 5000 for sending
     # UDP Socket setup
@@ -66,6 +81,10 @@ def send_command(frame_id, encrypted_cmd):
     sock.close()
     
     print(f"Sent command for Frame ID {frame_id}: {message}")
+# Example usage:
+# send_command(100, "example_encrypted_command")
+
+
 
 # GStreamer pipeline to receive video stream from port 5000
 
@@ -97,91 +116,82 @@ cap = cv2.VideoCapture(gstreamer_pipeline, cv2.CAP_GSTREAMER)
 '''
 Testing binding the port
 '''
-
+##########################################################################
 # Create UDP socket and enable address/port reuse
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+#sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+#sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+#sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 #sock.bind((player_ip, player_port))  # Bind to port 5000
+
 
 
 if not cap.isOpened():
     print("Error: Could not open video stream")
     exit()
 
-# Variables reset
 frame_counter = 1
-total_buffer_bytes = 0  # Accumulate the total bytes received
-buffer_frame_count = 0  # Number of frames currently in the buffer
-
-
-# Open the log file to store buffer information
-buffer_log_file = open("forza_buffer_log.txt", "w")
-buffer_log_file.write("ID,Frames in Buffer,Occupied Buffer in Bytes\n")  # Header for the log file
-
+timeout_duration = 0.001  # 5 seconds timeout for frame reception
+previous_command = None
 
 while True:
+    start_time = time.time()  # Start the timer for timeout
+
+    # Try to receive the next frame
     ret, frame = cap.read()
-    frm_rcv = time.time() * 1000 # millisecond
+
+    # If no frame is received within the timeout, resend the previous command
     if not ret:
-        print(f"Failed to grab frame {frame_counter + 1}")
-        break
-    
-    
-    # Calculate the size of the current frame in bytes
-    frame_size_bytes = frame.nbytes  # Get the size of the frame in bytes
-    total_buffer_bytes += frame_size_bytes  # Accumulate the total buffer size
-    buffer_frame_count += 1  # Increment the number of frames in the buffer
+        while not ret and time.time() - start_time < timeout_duration:
+            # Wait for a bit before trying again
+            time.sleep(0.1)
+            ret, frame = cap.read()
+        
+        if not ret:  # If still no frame after timeout, resend the command
+            if previous_command:
+                print(f"Timeout occurred, resending the previous command for Frame {frame_counter}")
+                send_command(frame_counter - 1, previous_command)
+            continue
 
+    frm_rcv = time.time() * 1000  # Millisecond timestamp for frame received
 
+    # Save the current frame to a file
+    frame_filename = f"./rcv_forza/{frame_counter:04d}_{frm_rcv}.png"
+    cv2.imwrite(frame_filename, frame)
+    print(f"Saved {frame_filename}")
+
+    # Log frame received time
+    with open("forza_frame_received_log.txt", "a") as f:
+        f.write(f"{frame_counter},{frm_rcv}\n")
 
     # Display the frame
     cv2.imshow("CG Player Client (LERIS)", frame)
 
-    # After the frame is displayed, reduce the buffer frame count
-    buffer_frame_count -= 1
-    total_buffer_bytes -= frame_size_bytes  # Decrease the total buffer size by the size of the displayed frame
-
-    frame_counter += 1  # Increment frame counter to track which frame we are on
-
-    # Log ID, number of frames in the buffer, and occupied buffer size in bytes to the log file
-    buffer_log_file.write(f"{frame_counter},{buffer_frame_count},{total_buffer_bytes} bytes\n")
-    buffer_log_file.flush()
-
-    print(f"Processing frame {frame_counter}, Frames in Buffer: {buffer_frame_count}, "
-          f"Occupied Buffer: {total_buffer_bytes} bytes")  # Debug print
-        # Save the current frame to a file ./rcv/frame{frame_counter:04d}_{frm_rcv}.png
-    frame_filename = f"./rcv_forza/{frame_counter:04d}_{frm_rcv}.png"  # Save as PNG with zero-padded frame number
-    cv2.imwrite(frame_filename, frame)
-    print(f"Saved {frame_filename}")
-
-    # frame_counter += 1  # Increment frame counter to track which frame we are on
-    with open("forza_frame_received_log.txt", "a") as f: f.write(f"{frame_counter},{frm_rcv}\n")
-
-    print(f"Processing frame {frame_counter}")  # Debug print
-
-
-
-
     # Check if there's a matching command for this frame
-    matching_command = autocommands_df[autocommands_df['ID'] == frame_counter]
+    matching_command = autocommands_df[autocommands_df['ID'] == (frame_counter+1)]
+
     if not matching_command.empty:
         print(f"Match found for Frame {frame_counter}")  # Debug print
 
-        # Iterate through each row of matching_command and send each encrypted command
+        # Send the command for the current frame
         matching_command.apply(lambda row: send_command(frame_counter, row['encrypted_cmd']), axis=1)
-    
-        # Log each command sent with a timestamp in milliseconds and the encrypted command
-        # matching_command.apply(lambda row: open("received.txt", "a").write(f"{int(time.time() * 1000)},{row['encrypted_cmd']}\n"),axis=1)
-    else:
-        print(f"Frame With No action {frame_counter}")  # Debug print
 
-# Press 'q' to exit the video display window
+        # Store the command to resend if the next frame isn't received
+        previous_command = matching_command.iloc[0]['encrypted_cmd']
+
+        cmd_sent = time.time() * 1000  # Millisecond timestamp for command sent
+        with open("forza_command_sent_log.txt", "a") as f:
+            f.write(f"{frame_counter},{cmd_sent}\n")
+    
+    else:
+        print(f"Frame with no action {frame_counter}")
+
+    frame_counter += 1
+
+    # Press 'q' to exit the video display window
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
 # Clean up
 cap.release()
 cv2.destroyAllWindows()
-sock.close()
-buffer_log_file.close()
+
