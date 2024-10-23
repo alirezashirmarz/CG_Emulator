@@ -77,6 +77,7 @@ def capture_screen(fps=30, duration=10):
         # Add the frame number and timestamp on the top-left corner of the image
         cv2.putText(img, frame_text, position, font, font_scale, font_color, thickness)
 
+        
         # Generate QR code with frame info (frame ID + timestamp)
         qr_data = f"Frame ID: {frame_id + 1}, Timestamp: {timestamp}"
         qr_img = generate_qr_code(qr_data)
@@ -89,7 +90,8 @@ def capture_screen(fps=30, duration=10):
         x_offset = img.shape[1] - qr_size - 10  # 10px padding from the right edge
         y_offset = img.shape[0] - qr_size - 10  # 10px padding from the bottom edge
         img[y_offset:y_offset + qr_size, x_offset:x_offset + qr_size] = qr_img
-
+        
+        
         # Write frame to video
         video_writer.write(img)
 

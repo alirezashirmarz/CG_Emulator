@@ -5,7 +5,7 @@ import time
 script1 = './Capture_Joystick.py'
 script2 = './Capture_Screen.py'
 
-filename = 'fortnite_test'
+filename = 'kombat_test'
 
 try:
     print("Waiting 10 seconds to start logging .... ")

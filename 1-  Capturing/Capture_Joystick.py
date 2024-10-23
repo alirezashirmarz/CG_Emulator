@@ -31,7 +31,7 @@ def get_joystick_data():
     # Convert to dictionary format for easy comparison
     return {
         "axes": {i: axes[i] for i in range(len(axes))},
-        #"buttons": {i: buttons[i] for i in range(len(buttons))}
+        "buttons": {i: buttons[i] for i in range(len(buttons))}
     }
 
 def log_joystick_data():
