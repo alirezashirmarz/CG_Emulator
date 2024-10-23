@@ -1,12 +1,13 @@
 import pygame
 import time
 import json
+import sys
 from datetime import datetime
 
 # Configuration
-LOG_FILE = "Forza_W_joystick_log.txt"
+LOG_FILE = f"{sys.argv[1]}.txt"
 CAPTURE_DURATION = 300  # Duration to capture data (in seconds) (Capture time that is 300 for 5 min)
-TICKS_PER_SECOND = 30  # Number of ticks per second (for sampling) (It is rate of sampling that should be match with fps (30 frame per second))
+TICKS_PER_SECOND = 60  # Number of ticks per second (for sampling) (It is rate of sampling that should be match with fps (30 frame per second))
 
 def get_joystick_data():
     """Retrieve current joystick axes and buttons data."""
@@ -19,13 +20,18 @@ def get_joystick_data():
     joystick = pygame.joystick.Joystick(0)
     joystick.init()
 
-    axes = [joystick.get_axis(i) for i in range(joystick.get_numaxes())]
+    #print(joystick.get_hat(0))
+
+    axes = [joystick.get_axis(i) for i in range(joystick.get_numaxes())]    
+    axes.append(joystick.get_hat(0)[0])
+    axes.append(joystick.get_hat(0)[1])
+    
     buttons = [joystick.get_button(i) for i in range(joystick.get_numbuttons())]
 
     # Convert to dictionary format for easy comparison
     return {
         "axes": {i: axes[i] for i in range(len(axes))},
-        "buttons": {i: buttons[i] for i in range(len(buttons))}
+        #"buttons": {i: buttons[i] for i in range(len(buttons))}
     }
 
 def log_joystick_data():
@@ -47,6 +53,7 @@ def log_joystick_data():
 
             # Check for changes between ticks
             if current_data != previous_data:
+                print(current_data)
                 # Log the change immediately
                 log_entry = create_log_entry(tick_count, current_data)
                 log_file.write(json.dumps(log_entry) + "\n")

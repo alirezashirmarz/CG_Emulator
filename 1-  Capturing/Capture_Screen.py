@@ -4,10 +4,11 @@ import cv2
 import mss
 import os
 import qrcode
+import sys
 from datetime import datetime
 
 # Configuration
-VIDEO_FILE = "Forza_W_output_video.mp4"
+VIDEO_FILE = f"{sys.argv[1]}.mp4"
 FRAMES_DIR = "captured_frames"
 FPS = 30
 CAPTURE_DURATION = 300  # Capture duration in seconds (Recorded time ~ for 5 min is 300)

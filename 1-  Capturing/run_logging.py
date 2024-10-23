@@ -5,15 +5,17 @@ import time
 script1 = './Capture_Joystick.py'
 script2 = './Capture_Screen.py'
 
+filename = 'fortnite_test'
+
 try:
     print("Waiting 10 seconds to start logging .... ")
     time.sleep(10)
     # Start the Python scripts
-    process1 = subprocess.Popen(['python3', script1])
-    process2 = subprocess.Popen(['python3', script2])
+    process1 = subprocess.Popen(['python3', script1, filename])
+    process2 = subprocess.Popen(['python3', script2, filename])
 
     # Start tshark command to capture network traffic
-    process3 = subprocess.Popen(['sudo', 'tshark', '-i', 'wlp0s20f3', '-a', 'duration:300' ,'-w', 'out_Forza_W.pcap'])
+    process3 = subprocess.Popen(['sudo', 'tshark', '-i', 'enp7s0', '-a', 'duration:300' ,'-w', f'{filename}.pcap'])
 
 
     # Wait for the Python scripts to finish
